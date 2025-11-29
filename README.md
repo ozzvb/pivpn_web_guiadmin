@@ -16,6 +16,8 @@ Script de despliegue para Ubuntu 24.04 que publica el panel PHP ubicado en `fron
 - Ubuntu 24.04 (amd64/arm probados con paquetes nativos).
 - PiVPN (OpenVPN) ya instalado y operativo.
 - Ejecute como `root` o con `sudo`.
+- Tras instalar PiVPN/OpenVPN cree al menos un cliente inicial (ejemplo):
+  - `pivpn -a -n TESTVPN nopass -d 1080`
 
 ## Instalación
 ```bash
@@ -36,6 +38,34 @@ sudo /usr/local/bin/pivpn-web-gui-uninstall
 - La contraseña se almacena como `password_hash` cifrada con AES-256-CBC en `/etc/pivpn-web-gui/password.enc`.
 - La clave simétrica reside en `/etc/pivpn-web-gui/secret.key` (permisos `640`, grupo `www-data`).
 - El panel fuerza login antes de ejecutar comandos PiVPN.
+
+### Cambiar la contraseña de ingreso
+Ejecute el asistente y defina la nueva contraseña cuando se le solicite:
+
+```bash
+sudo pivpn-web-gui-reset-password
+```
+
+### Recuperar o resetear la contraseña de ingreso
+Si el login falla o pierde la contraseña, regenere el almacén cifrado con un valor nuevo:
+
+```bash
+sudo PIVPN_GUI_PASSWORD="NUEVA_CONTRASEÑA" php -r '
+$pwd = getenv("PIVPN_GUI_PASSWORD");
+if (!$pwd) { fwrite(STDERR, "Falta PIVPN_GUI_PASSWORD\\n"); exit(1); }
+$passwordFile = "/etc/pivpn-web-gui/password.enc";
+$keyFile = "/etc/pivpn-web-gui/secret.key";
+$key = file_exists($keyFile) ? base64_decode(file_get_contents($keyFile)) : random_bytes(32);
+$hash = password_hash($pwd, PASSWORD_DEFAULT);
+$iv = random_bytes(openssl_cipher_iv_length("aes-256-cbc"));
+$cipher = openssl_encrypt($hash, "aes-256-cbc", $key, 0, $iv);
+file_put_contents($passwordFile, json_encode(["iv" => base64_encode($iv), "cipher" => $cipher], JSON_PRETTY_PRINT));
+file_put_contents($keyFile, base64_encode($key));
+';
+sudo chown root:www-data /etc/pivpn-web-gui/password.enc /etc/pivpn-web-gui/secret.key
+sudo chmod 640 /etc/pivpn-web-gui/password.enc /etc/pivpn-web-gui/secret.key
+sudo systemctl reload apache2
+```
 
 ## Logs
 - Acciones del panel: `/var/log/pivpn-web-gui/actions.log`.

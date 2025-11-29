@@ -11,6 +11,7 @@ SETUP_VARS_FILE="/etc/pivpn/openvpn/setupVars.conf"
 APACHE_SITE="/etc/apache2/sites-available/${APP_NAME}.conf"
 SUDOERS_FILE="/etc/sudoers.d/${APP_NAME}"
 UNINSTALL_BIN="/usr/local/bin/${APP_NAME}-uninstall"
+RESET_BIN="/usr/local/bin/${APP_NAME}-reset-password"
 
 require_root() {
   if [[ "${EUID}" -ne 0 ]]; then
@@ -125,6 +126,67 @@ PHP
   chown root:"${WEB_USER}" "${PASSWORD_DIR}/password.enc" "${PASSWORD_DIR}/secret.key"
 }
 
+create_reset_password_bin() {
+  cat <<'EOF' > "${RESET_BIN}"
+#!/usr/bin/env bash
+set -euo pipefail
+
+APP_NAME="pivpn-web-gui"
+WEB_USER="www-data"
+PASSWORD_DIR="/etc/${APP_NAME}"
+PASSWORD_FILE="${PASSWORD_DIR}/password.enc"
+KEY_FILE="${PASSWORD_DIR}/secret.key"
+
+if [[ ${EUID} -ne 0 ]]; then
+  echo "Ejecute como root" >&2
+  exit 1
+fi
+
+read -r -s -p "Nueva contraseña: " pass1; echo
+read -r -s -p "Confirmar contraseña: " pass2; echo
+if [[ -z "${pass1}" ]]; then
+  echo "La contraseña no puede estar vacía" >&2
+  exit 1
+fi
+if [[ "${pass1}" != "${pass2}" ]]; then
+  echo "Las contraseñas no coinciden" >&2
+  exit 1
+fi
+
+tmp_script=$(mktemp)
+cat <<'PHP' > "${tmp_script}"
+<?php
+$password = getenv('PIVPN_GUI_PASSWORD');
+$passwordFile = $argv[1];
+$keyFile = $argv[2];
+if ($password === false || $password === '') {
+    fwrite(STDERR, "Falta PIVPN_GUI_PASSWORD\n");
+    exit(1);
+}
+$key = file_exists($keyFile) ? base64_decode(file_get_contents($keyFile)) : random_bytes(32);
+$hash = password_hash($password, PASSWORD_DEFAULT);
+$iv = random_bytes(openssl_cipher_iv_length('aes-256-cbc'));
+$cipher = openssl_encrypt($hash, 'aes-256-cbc', $key, 0, $iv);
+file_put_contents($passwordFile, json_encode([
+    'iv' => base64_encode($iv),
+    'cipher' => $cipher
+], JSON_PRETTY_PRINT));
+file_put_contents($keyFile, base64_encode($key));
+PHP
+PIVPN_GUI_PASSWORD="${pass1}" php "${tmp_script}" "${PASSWORD_FILE}" "${KEY_FILE}"
+rm -f "${tmp_script}"
+
+chown root:"${WEB_USER}" "${PASSWORD_FILE}" "${KEY_FILE}"
+chmod 640 "${PASSWORD_FILE}" "${KEY_FILE}"
+
+systemctl reload apache2 >/dev/null 2>&1 || true
+
+echo "[OK] Contraseña actualizada"
+EOF
+
+  chmod +x "${RESET_BIN}"
+}
+
 configure_sudoers() {
   cat <<EOF > "${SUDOERS_FILE}"
 Defaults:${WEB_USER} !requiretty
@@ -189,6 +251,7 @@ APACHE_SITE="/etc/apache2/sites-available/${APP_NAME}.conf"
 SUDOERS_FILE="/etc/sudoers.d/${APP_NAME}"
 SERVICE_PORT="${PIVPN_WEB_PORT:-51821}"
 PORT_FILE="${PASSWORD_DIR}/port.conf"
+RESET_BIN="/usr/local/bin/${APP_NAME}-reset-password"
 
 if [[ ${EUID} -ne 0 ]]; then
   echo "Ejecute como root" >&2
@@ -206,6 +269,7 @@ rm -f "${APACHE_SITE}" "${SUDOERS_FILE}" /etc/logrotate.d/${APP_NAME}
 rm -rf "${WEB_ROOT}" "${PASSWORD_DIR}"
 rm -f "${LOG_DIR}"/*.log
 rmdir "${LOG_DIR}" 2>/dev/null || true
+rm -f "${RESET_BIN}"
 systemctl reload apache2 >/dev/null 2>&1 || true
 
 echo "Desinstalación completada"
@@ -236,6 +300,7 @@ main() {
   configure_apache "${SERVICE_PORT}"
   configure_logrotate
   create_uninstall
+  create_reset_password_bin
 
   echo "[OK] Instalación finalizada. La GUI está disponible en http://<host>:${SERVICE_PORT}/"
   echo "[INFO] Para desinstalar ejecute: sudo ${UNINSTALL_BIN}"
