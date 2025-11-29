@@ -1,3 +1,9 @@
+<?php
+declare(strict_types=1);
+
+require_once __DIR__ . '/bootstrap.php';
+require_authentication();
+?>
 <!doctype html>
 <html lang="es" data-bs-theme="dark">
 <head>
@@ -52,11 +58,14 @@
 <body class="bg-dark text-light">
 
 <nav class="navbar navbar-expand-lg navbar-dark bg-black mb-4 shadow-sm">
-  <div class="container-fluid justify-content-center">
+  <div class="container-fluid">
     <a class="navbar-brand" href="#">
       <img src="http://www.pivpn.io/images/pivpn_logo.png" alt="" width="30" height="30" class="me-2">
       Panel Administrador PiVPN
     </a>
+    <div class="d-flex ms-auto">
+      <a class="btn btn-outline-light btn-sm" href="logout.php">Cerrar sesión</a>
+    </div>
   </div>
 </nav>
 
@@ -127,17 +136,7 @@
     <div class="card-body">
 
       <?php
-        // Directorio de OVPN
-        $dirOvpn = '/var/www/vpn/ovpns';
-        $archivos = [];
-        if (is_dir($dirOvpn)) {
-          foreach (scandir($dirOvpn) as $f) {
-            if ($f === '.' || $f === '..') continue;
-            $ruta = $dirOvpn . DIRECTORY_SEPARATOR . $f;
-            if (is_file($ruta)) $archivos[] = $f;
-          }
-        }
-        natcasesort($archivos);
+        $archivos = list_ovpn_files();
       ?>
 
       <div class="table-responsive">
