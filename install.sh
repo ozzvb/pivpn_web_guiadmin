@@ -93,6 +93,10 @@ configure_ovpn_link() {
   local ovpn_src="$1"
   ln -sfn "${ovpn_src}" "${WEB_ROOT}/ovpns"
   if command -v setfacl >/dev/null 2>&1; then
+    local parent_dir
+    parent_dir=$(dirname "${ovpn_src}")
+    setfacl -m u:"${WEB_USER}":rx "${parent_dir}" 2>/dev/null || true
+    setfacl -m d:u:"${WEB_USER}":rx "${parent_dir}" 2>/dev/null || true
     setfacl -R -m u:"${WEB_USER}":rwx "${ovpn_src}"
     setfacl -R -m d:u:"${WEB_USER}":rwx "${ovpn_src}"
   fi
@@ -171,6 +175,34 @@ for f in "${PASSWORD_FILE}" "${SUDOERS_FILE}" "${SETUP_VARS_FILE}"; do
     echo "  [FALTA] ${f}" >&2
   fi
 done
+
+install_home=$(awk -F '=' '/^install_home=/{print $2}' "${SETUP_VARS_FILE}" 2>/dev/null || true)
+if [[ -z "${install_home}" ]]; then
+  echo "[ERROR] No se pudo leer install_home desde ${SETUP_VARS_FILE}" >&2
+else
+  echo "[INFO] install_home detectado: ${install_home}"
+  if [[ -d "${install_home}" ]]; then
+    if sudo -u "${WEB_USER}" test -x "${install_home}"; then
+      echo "  [OK] ${WEB_USER} puede atravesar install_home"
+    else
+      echo "  [ERROR] ${WEB_USER} no puede atravesar ${install_home}. Ajuste ACL o permisos." >&2
+    fi
+  else
+    echo "  [FALTA] Directorio install_home: ${install_home}" >&2
+  fi
+fi
+
+ovpn_src="${install_home}/ovpns"
+echo "[INFO] Validando carpeta de perfiles en ${ovpn_src}..."
+if [[ -d "${ovpn_src}" ]]; then
+  if sudo -u "${WEB_USER}" ls "${ovpn_src}" >/dev/null 2>&1; then
+    echo "  [OK] ${WEB_USER} puede listar ${ovpn_src}"
+  else
+    echo "  [ERROR] ${WEB_USER} no puede acceder a ${ovpn_src}. Revise ACL y permisos padres." >&2
+  fi
+else
+  echo "  [FALTA] ${ovpn_src}" >&2
+fi
 
 echo "[INFO] Validando almacén de contraseña..."
 if sudo -u "${WEB_USER}" test -r "${PASSWORD_FILE}"; then
