@@ -4,7 +4,7 @@ Este es un panel web liviano escrito en PHP para administrar clientes de PiVPN (
 
 ## Funcionalidades
 
-- Login protegido por contraseña (almacenada cifrada en `/etc/pivpn-web-gui`).
+- Login protegido por contraseña (almacenada en texto plano en `/etc/pivpn-web-gui/password.txt`).
 - Crear cliente VPN.
 - Listar clientes existentes (`pivpn -l`).
 - Ver conexiones activas (`pivpn -c`).

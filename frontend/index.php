@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/bootstrap.php';
 require_authentication();
+$flash = consume_flash();
 ?>
 <!doctype html>
 <html lang="es" data-bs-theme="dark">
@@ -69,24 +70,14 @@ require_authentication();
   </div>
 </nav>
 
-<div class="container">
+  <div class="container">
 
-  <?php
-    // Mensajes de estado
-    $statusMap = [
-      'created' => ['success', 'Cliente creado exitosamente.'],
-      'deleted' => ['warning', 'Cliente eliminado.'],
-      'invalid' => ['danger',  'Nombre inválido.'],
-      'ok'      => ['secondary','Acción completada.']
-    ];
-    if (isset($_GET['status']) && isset($statusMap[$_GET['status']])) {
-      [$cls, $msg] = $statusMap[$_GET['status']];
-      echo '<div class="alert alert-'.$cls.' alert-dismissible fade show" role="alert">'
-          . htmlspecialchars($msg)
-          . '<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>'
-          . '</div>';
-    }
-  ?>
+  <?php if ($flash): ?>
+    <div class="alert alert-<?= htmlspecialchars($flash['type'] ?? 'secondary') ?> alert-dismissible fade show" role="alert">
+      <?= htmlspecialchars($flash['message'] ?? '') ?>
+      <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+  <?php endif; ?>
 
   <!-- Crear cliente VPN -->
   <div class="card bg-secondary mb-4 shadow">

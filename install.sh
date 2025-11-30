@@ -12,6 +12,7 @@ APACHE_SITE="/etc/apache2/sites-available/${APP_NAME}.conf"
 SUDOERS_FILE="/etc/sudoers.d/${APP_NAME}"
 UNINSTALL_BIN="/usr/local/bin/${APP_NAME}-uninstall"
 RESET_BIN="/usr/local/bin/${APP_NAME}-reset-password"
+DIAG_BIN="/usr/local/bin/${APP_NAME}-diagnose"
 
 require_root() {
   if [[ "${EUID}" -ne 0 ]]; then
@@ -99,31 +100,9 @@ configure_ovpn_link() {
 
 generate_password_store() {
   local password="$1"
-  local tmp_script
-  tmp_script=$(mktemp)
-  cat <<'PHP' > "${tmp_script}"
-<?php
-$password = getenv('PIVPN_GUI_PASSWORD');
-$passwordFile = $argv[1];
-$keyFile = $argv[2];
-if ($password === false || $password === '') {
-    fwrite(STDERR, "Contraseña no recibida\n");
-    exit(1);
-}
-$hash = password_hash($password, PASSWORD_DEFAULT);
-$key = random_bytes(32);
-$iv = random_bytes(openssl_cipher_iv_length('aes-256-cbc'));
-$cipher = openssl_encrypt($hash, 'aes-256-cbc', $key, 0, $iv);
-file_put_contents($passwordFile, json_encode([
-    'iv' => base64_encode($iv),
-    'cipher' => $cipher
-], JSON_PRETTY_PRINT));
-file_put_contents($keyFile, base64_encode($key));
-PHP
-  PIVPN_GUI_PASSWORD="${password}" php "${tmp_script}" "${PASSWORD_DIR}/password.enc" "${PASSWORD_DIR}/secret.key"
-  rm -f "${tmp_script}"
-  chmod 640 "${PASSWORD_DIR}/password.enc" "${PASSWORD_DIR}/secret.key"
-  chown root:"${WEB_USER}" "${PASSWORD_DIR}/password.enc" "${PASSWORD_DIR}/secret.key"
+  printf '%s' "${password}" > "${PASSWORD_DIR}/password.txt"
+  chmod 640 "${PASSWORD_DIR}/password.txt"
+  chown root:"${WEB_USER}" "${PASSWORD_DIR}/password.txt"
 }
 
 create_reset_password_bin() {
@@ -134,8 +113,7 @@ set -euo pipefail
 APP_NAME="pivpn-web-gui"
 WEB_USER="www-data"
 PASSWORD_DIR="/etc/${APP_NAME}"
-PASSWORD_FILE="${PASSWORD_DIR}/password.enc"
-KEY_FILE="${PASSWORD_DIR}/secret.key"
+PASSWORD_FILE="${PASSWORD_DIR}/password.txt"
 
 if [[ ${EUID} -ne 0 ]]; then
   echo "Ejecute como root" >&2
@@ -153,31 +131,10 @@ if [[ "${pass1}" != "${pass2}" ]]; then
   exit 1
 fi
 
-tmp_script=$(mktemp)
-cat <<'PHP' > "${tmp_script}"
-<?php
-$password = getenv('PIVPN_GUI_PASSWORD');
-$passwordFile = $argv[1];
-$keyFile = $argv[2];
-if ($password === false || $password === '') {
-    fwrite(STDERR, "Falta PIVPN_GUI_PASSWORD\n");
-    exit(1);
-}
-$key = file_exists($keyFile) ? base64_decode(file_get_contents($keyFile)) : random_bytes(32);
-$hash = password_hash($password, PASSWORD_DEFAULT);
-$iv = random_bytes(openssl_cipher_iv_length('aes-256-cbc'));
-$cipher = openssl_encrypt($hash, 'aes-256-cbc', $key, 0, $iv);
-file_put_contents($passwordFile, json_encode([
-    'iv' => base64_encode($iv),
-    'cipher' => $cipher
-], JSON_PRETTY_PRINT));
-file_put_contents($keyFile, base64_encode($key));
-PHP
-PIVPN_GUI_PASSWORD="${pass1}" php "${tmp_script}" "${PASSWORD_FILE}" "${KEY_FILE}"
-rm -f "${tmp_script}"
+printf '%s' "${pass1}" > "${PASSWORD_FILE}"
 
-chown root:"${WEB_USER}" "${PASSWORD_FILE}" "${KEY_FILE}"
-chmod 640 "${PASSWORD_FILE}" "${KEY_FILE}"
+chown root:"${WEB_USER}" "${PASSWORD_FILE}"
+chmod 640 "${PASSWORD_FILE}"
 
 systemctl reload apache2 >/dev/null 2>&1 || true
 
@@ -185,6 +142,81 @@ echo "[OK] Contraseña actualizada"
 EOF
 
   chmod +x "${RESET_BIN}"
+}
+
+create_diagnose_bin() {
+  cat <<'EOF' > "${DIAG_BIN}"
+#!/usr/bin/env bash
+set -euo pipefail
+
+APP_NAME="pivpn-web-gui"
+WEB_USER="www-data"
+WEB_ROOT="/var/www/${APP_NAME}"
+PASSWORD_DIR="/etc/${APP_NAME}"
+PASSWORD_FILE="${PASSWORD_DIR}/password.txt"
+LOG_DIR="/var/log/${APP_NAME}"
+SUDOERS_FILE="/etc/sudoers.d/${APP_NAME}"
+SETUP_VARS_FILE="/etc/pivpn/openvpn/setupVars.conf"
+
+if [[ ${EUID} -ne 0 ]]; then
+  echo "Ejecute como root" >&2
+  exit 1
+fi
+
+echo "[INFO] Verificando archivos principales..."
+for f in "${PASSWORD_FILE}" "${SUDOERS_FILE}" "${SETUP_VARS_FILE}"; do
+  if [[ -f "${f}" ]]; then
+    echo "  [OK] Existe: ${f}"
+  else
+    echo "  [FALTA] ${f}" >&2
+  fi
+done
+
+echo "[INFO] Validando almacén de contraseña..."
+if sudo -u "${WEB_USER}" test -r "${PASSWORD_FILE}"; then
+  if [[ -s "${PASSWORD_FILE}" ]]; then
+    echo "  [OK] ${WEB_USER} puede leer el password.txt y no está vacío"
+  else
+    echo "  [ERROR] password.txt está vacío" >&2
+  fi
+else
+  echo "  [ERROR] ${WEB_USER} no puede leer ${PASSWORD_FILE}" >&2
+fi
+
+echo "[INFO] Probando sudoers para ${WEB_USER}..."
+if sudo -u "${WEB_USER}" sudo -l /usr/local/bin/pivpn >/dev/null 2>&1; then
+  echo "  [OK] ${WEB_USER} puede ejecutar pivpn"
+else
+  echo "  [ERROR] ${WEB_USER} no tiene permisos sudo para pivpn" >&2
+fi
+
+echo "[INFO] Probando respuesta de pivpn..."
+if sudo -u "${WEB_USER}" sudo /usr/local/bin/pivpn --help >/dev/null 2>&1; then
+  echo "  [OK] pivpn responde"
+else
+  echo "  [ERROR] pivpn no responde para ${WEB_USER}" >&2
+fi
+
+echo "[INFO] Validando directorio de perfiles OVPN..."
+if [[ -d "${WEB_ROOT}/ovpns" ]]; then
+  if sudo -u "${WEB_USER}" ls "${WEB_ROOT}/ovpns" >/dev/null 2>&1; then
+    echo "  [OK] ${WEB_USER} puede listar ovpns"
+  else
+    echo "  [ERROR] ${WEB_USER} no puede acceder a ${WEB_ROOT}/ovpns" >&2
+  fi
+else
+  echo "  [FALTA] ${WEB_ROOT}/ovpns" >&2
+fi
+
+echo "[INFO] Últimas entradas del log de acciones:"
+if [[ -f "${LOG_DIR}/actions.log" ]]; then
+  tail -n 20 "${LOG_DIR}/actions.log"
+else
+  echo "  No hay log de acciones aún."
+fi
+EOF
+
+  chmod +x "${DIAG_BIN}"
 }
 
 configure_sudoers() {
@@ -252,6 +284,7 @@ SUDOERS_FILE="/etc/sudoers.d/${APP_NAME}"
 SERVICE_PORT="${PIVPN_WEB_PORT:-51821}"
 PORT_FILE="${PASSWORD_DIR}/port.conf"
 RESET_BIN="/usr/local/bin/${APP_NAME}-reset-password"
+DIAG_BIN="/usr/local/bin/${APP_NAME}-diagnose"
 
 if [[ ${EUID} -ne 0 ]]; then
   echo "Ejecute como root" >&2
@@ -269,7 +302,7 @@ rm -f "${APACHE_SITE}" "${SUDOERS_FILE}" /etc/logrotate.d/${APP_NAME}
 rm -rf "${WEB_ROOT}" "${PASSWORD_DIR}"
 rm -f "${LOG_DIR}"/*.log
 rmdir "${LOG_DIR}" 2>/dev/null || true
-rm -f "${RESET_BIN}"
+rm -f "${RESET_BIN}" "${DIAG_BIN}"
 systemctl reload apache2 >/dev/null 2>&1 || true
 
 echo "Desinstalación completada"
@@ -301,6 +334,7 @@ main() {
   configure_logrotate
   create_uninstall
   create_reset_password_bin
+  create_diagnose_bin
 
   echo "[OK] Instalación finalizada. La GUI está disponible en http://<host>:${SERVICE_PORT}/"
   echo "[INFO] Para desinstalar ejecute: sudo ${UNINSTALL_BIN}"
