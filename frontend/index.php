@@ -1,3 +1,10 @@
+<?php
+declare(strict_types=1);
+
+require_once __DIR__ . '/bootstrap.php';
+require_authentication();
+$flash = consume_flash();
+?>
 <!doctype html>
 <html lang="es" data-bs-theme="dark">
 <head>
@@ -52,32 +59,25 @@
 <body class="bg-dark text-light">
 
 <nav class="navbar navbar-expand-lg navbar-dark bg-black mb-4 shadow-sm">
-  <div class="container-fluid justify-content-center">
+  <div class="container-fluid">
     <a class="navbar-brand" href="#">
       <img src="http://www.pivpn.io/images/pivpn_logo.png" alt="" width="30" height="30" class="me-2">
       Panel Administrador PiVPN
     </a>
+    <div class="d-flex ms-auto">
+      <a class="btn btn-outline-light btn-sm" href="logout.php">Cerrar sesión</a>
+    </div>
   </div>
 </nav>
 
-<div class="container">
+  <div class="container">
 
-  <?php
-    // Mensajes de estado
-    $statusMap = [
-      'created' => ['success', 'Cliente creado exitosamente.'],
-      'deleted' => ['warning', 'Cliente eliminado.'],
-      'invalid' => ['danger',  'Nombre inválido.'],
-      'ok'      => ['secondary','Acción completada.']
-    ];
-    if (isset($_GET['status']) && isset($statusMap[$_GET['status']])) {
-      [$cls, $msg] = $statusMap[$_GET['status']];
-      echo '<div class="alert alert-'.$cls.' alert-dismissible fade show" role="alert">'
-          . htmlspecialchars($msg)
-          . '<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>'
-          . '</div>';
-    }
-  ?>
+  <?php if ($flash): ?>
+    <div class="alert alert-<?= htmlspecialchars($flash['type'] ?? 'secondary') ?> alert-dismissible fade show" role="alert">
+      <?= htmlspecialchars($flash['message'] ?? '') ?>
+      <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+  <?php endif; ?>
 
   <!-- Crear cliente VPN -->
   <div class="card bg-secondary mb-4 shadow">
@@ -108,7 +108,10 @@
     <div class="card-header text-white">Clientes VPN</div>
     <div class="card-body">
       <pre class="bg-black p-2 text-success border rounded"><?php echo shell_exec('sudo /usr/local/bin/pivpn -l | grep -v Revoked'); ?></pre>
-      <a href="#lista" class="btn btn-outline-success w-100 mt-2">Actualizar listado</a>
+      <form method="get" class="mt-2">
+        <input type="hidden" name="refresh" value="clients">
+        <button type="submit" class="btn btn-outline-success w-100">Actualizar listado</button>
+      </form>
     </div>
   </div>
 
@@ -117,7 +120,10 @@
     <div class="card-header text-white">Conexiones VPN activas</div>
     <div class="card-body">
       <pre class="bg-black p-2 text-info border rounded"><?php echo shell_exec('sudo /usr/local/bin/pivpn -c'); ?></pre>
-      <a href="#con" class="btn btn-outline-info w-100 mt-2">Actualizar estado</a>
+      <form method="get" class="mt-2">
+        <input type="hidden" name="refresh" value="connections">
+        <button type="submit" class="btn btn-outline-info w-100">Actualizar estado</button>
+      </form>
     </div>
   </div>
 
@@ -127,17 +133,7 @@
     <div class="card-body">
 
       <?php
-        // Directorio de OVPN
-        $dirOvpn = '/var/www/vpn/ovpns';
-        $archivos = [];
-        if (is_dir($dirOvpn)) {
-          foreach (scandir($dirOvpn) as $f) {
-            if ($f === '.' || $f === '..') continue;
-            $ruta = $dirOvpn . DIRECTORY_SEPARATOR . $f;
-            if (is_file($ruta)) $archivos[] = $f;
-          }
-        }
-        natcasesort($archivos);
+        $archivos = list_ovpn_files();
       ?>
 
       <div class="table-responsive">
