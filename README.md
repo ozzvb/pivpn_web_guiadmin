@@ -14,7 +14,7 @@ Script de despliegue para Ubuntu 24.04 que publica el panel PHP ubicado en `fron
 
 ## Requisitos previos
 - Ubuntu 24.04 (amd64/arm probados con paquetes nativos).
-- PiVPN (OpenVPN) ya instalado y operativo.
+- PiVPN (OpenVPN) ya instalado y operativo, mediante la mecanica de openvpn -> https://github.com/pivpn/pivpn
 - Ejecute como `root` o con `sudo`.
 - Tras instalar PiVPN/OpenVPN cree al menos un cliente inicial (ejemplo):
   - `pivpn -a -n TESTVPN nopass -d 1080`
