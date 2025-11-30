@@ -81,6 +81,10 @@ configure_ovpn_link() {
   local ovpn_src="$1"
   ln -sfn "${ovpn_src}" "${WEB_ROOT}/ovpns"
   if command -v setfacl >/dev/null 2>&1; then
+    local parent_dir
+    parent_dir=$(dirname "${ovpn_src}")
+    setfacl -m u:"${WEB_USER}":rx "${parent_dir}" 2>/dev/null || true
+    setfacl -m d:u:"${WEB_USER}":rx "${parent_dir}" 2>/dev/null || true
     setfacl -R -m u:"${WEB_USER}":rwx "${ovpn_src}"
     setfacl -R -m d:u:"${WEB_USER}":rwx "${ovpn_src}"
   fi
