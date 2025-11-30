@@ -29,6 +29,16 @@ Durante la instalación se le pedirá la contraseña para acceder al panel.
 ### Variables opcionales
 - `PIVPN_WEB_PORT`: Puerto donde escuchará Apache para el panel (por defecto `51821`).
 
+## Actualización entre versiones
+Para actualizar el código del panel sin tocar la contraseña almacenada ni los ajustes existentes, ejecute como root o con sudo:
+
+```bash
+cd /ruta/al/repositorio
+sudo bash update.sh
+```
+
+El script reutiliza el puerto ya guardado en `/etc/pivpn-web-gui/port.conf` (o `PIVPN_WEB_PORT` si no existe), vuelve a sincronizar el frontend y recarga Apache.
+
 ## Desinstalación
 ```bash
 sudo /usr/local/bin/pivpn-web-gui-uninstall
@@ -51,6 +61,8 @@ Ejecute el chequeo automático y revise el resultado de cada prueba (sudoers, ac
 ```bash
 sudo pivpn-web-gui-diagnose
 ```
+
+El diagnóstico valida que `www-data` pueda leer el `password.txt` y que no esté vacío; corrija permisos o reescriba la clave si encuentra un error.
 
 Luego, consulte el log de acciones para ver errores detallados de creación/eliminación:
 

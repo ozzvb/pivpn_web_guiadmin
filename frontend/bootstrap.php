@@ -1,6 +1,11 @@
 <?php
 declare(strict_types=1);
 
+session_set_cookie_params([
+    'httponly' => true,
+    'secure' => isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== '' && $_SERVER['HTTPS'] !== 'off',
+    'samesite' => 'Lax',
+]);
 session_name('pivpn_web_gui');
 session_start();
 
@@ -46,6 +51,11 @@ function require_authentication(): void
 
 function logout_user(): void
 {
+    $_SESSION = [];
+    if (PHP_SESSION_ACTIVE === session_status()) {
+        $params = session_get_cookie_params();
+        setcookie(session_name(), '', time() - 42000, $params['path'], $params['domain'], $params['secure'], $params['httponly']);
+    }
     session_destroy();
 }
 

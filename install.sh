@@ -172,6 +172,17 @@ for f in "${PASSWORD_FILE}" "${SUDOERS_FILE}" "${SETUP_VARS_FILE}"; do
   fi
 done
 
+echo "[INFO] Validando almacén de contraseña..."
+if sudo -u "${WEB_USER}" test -r "${PASSWORD_FILE}"; then
+  if [[ -s "${PASSWORD_FILE}" ]]; then
+    echo "  [OK] ${WEB_USER} puede leer el password.txt y no está vacío"
+  else
+    echo "  [ERROR] password.txt está vacío" >&2
+  fi
+else
+  echo "  [ERROR] ${WEB_USER} no puede leer ${PASSWORD_FILE}" >&2
+fi
+
 echo "[INFO] Probando sudoers para ${WEB_USER}..."
 if sudo -u "${WEB_USER}" sudo -l /usr/local/bin/pivpn >/dev/null 2>&1; then
   echo "  [OK] ${WEB_USER} puede ejecutar pivpn"
