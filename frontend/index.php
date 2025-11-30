@@ -108,7 +108,10 @@ $flash = consume_flash();
     <div class="card-header text-white">Clientes VPN</div>
     <div class="card-body">
       <pre class="bg-black p-2 text-success border rounded"><?php echo shell_exec('sudo /usr/local/bin/pivpn -l | grep -v Revoked'); ?></pre>
-      <a href="#lista" class="btn btn-outline-success w-100 mt-2">Actualizar listado</a>
+      <form method="get" class="mt-2">
+        <input type="hidden" name="refresh" value="clients">
+        <button type="submit" class="btn btn-outline-success w-100">Actualizar listado</button>
+      </form>
     </div>
   </div>
 
@@ -117,7 +120,10 @@ $flash = consume_flash();
     <div class="card-header text-white">Conexiones VPN activas</div>
     <div class="card-body">
       <pre class="bg-black p-2 text-info border rounded"><?php echo shell_exec('sudo /usr/local/bin/pivpn -c'); ?></pre>
-      <a href="#con" class="btn btn-outline-info w-100 mt-2">Actualizar estado</a>
+      <form method="get" class="mt-2">
+        <input type="hidden" name="refresh" value="connections">
+        <button type="submit" class="btn btn-outline-info w-100">Actualizar estado</button>
+      </form>
     </div>
   </div>
 
